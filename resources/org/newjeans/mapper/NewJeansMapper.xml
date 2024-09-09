@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.newjeans.mapper.NewJeansMapper">
+
+
+  <sql id="criteria">
+  	<trim prefix="(" suffix=") AND " prefixOverrides="OR">
+		<foreach item='type' collection="typeArr">
+			<trim prefix="OR">
+				<choose>
+					<when test="type == 'T'.toString()">
+						title like '%'||#{keyword}||'%'
+					</when>
+					<when test="type == 'C'.toString()">
+						content like '%'||#{keyword}||'%'
+					</when>
+					<!-- <when test="type == 'W'.toString()">
+						writer like '%'||#{keyword}||'%'
+					</when> -->
+				</choose>
+			</trim>
+		</foreach>
+	</trim>	    
+  </sql>	
+
+
+	<!-- 목록 -->
+  <select id="getList" resultType="org.newjeans.domain.NewJeansDTO">
+    select * from tbl_board where bno>0
+  </select>
+  
+  	<!-- 가장 최근 뉴스 -->
+	<select id="getLast" resultType="org.newjeans.domain.NewJeansDTO">
+	    SELECT * FROM tbl_board
+	    WHERE bno = (SELECT MAX(bno) FROM tbl_board)
+	</select>
+
+	<!-- 등록 -->
+	<insert id="insert">
+		insert into tbl_board (bno,cno,title,content,writer)
+		values (seq_board.nextval, #{cno}, #{title}, #{content}, #{writer})
+	</insert>
+
+	<insert id="insertSelectKey">
+		<selectKey keyProperty="bno" order="BEFORE"
+			resultType="long">
+			select seq_board.nextval from dual
+		</selectKey>
+
+		insert into tbl_board (bno, cno, title, content, writer)
+		values (#{bno}, #{cno}, #{title}, #{content}, #{writer})
+	</insert>
+	
+	
+	
+	<!-- 상세보기 -->
+	<select id="read" resultType="org.newjeans.domain.NewJeansDTO">
+		select * from tbl_board where bno = #{bno}
+	</select>
+
+
+	<!-- 수정 -->
+	<update id="update">
+		update tbl_board
+		set title = #{title}, content = #{content}, updateDate = sysdate, cno = #{cno}
+		where bno = #{bno}
+	</update>
+	
+	
+	<!-- 삭제. 두 테이블이 FK로 연결되어 있어서 댓글이 있는 경우 게시글 삭제 오류. 댓글 먼저 삭제해주기 -->
+	<delete id="deleteReply">
+		delete tbl_reply where bno = #{bno}
+	</delete>
+	<delete id="deleteBoard">
+		delete tbl_board where bno = #{bno}
+	</delete>
+
+
+	<!-- 페이징 처리 -->
+<!-- 	<select id="getListWithPaging" resultType="org.zerock.domain.NewJeansDTO">
+	<![CDATA[
+	select bno, title, content, writer, regdate, updatedate
+	from 
+		(
+		select /*+INDEX_DESC(tbl_board pk_board) */
+			rownum rn, bno, title, content, writer, regdate, updatedate 
+		from tbl_board
+		where rownum <= #{pageNum} * #{amount}
+	)
+	where rn > (#{pageNum} -1) * #{amount}   
+	]]>
+	</select> -->
+
+
+	<!-- 페이징 처리 -->
+	<select id="getListWithPaging" resultType="org.newjeans.domain.NewJeansDTO">
+		<![CDATA[
+		select bno,title,content,writer,regdate,updatedate,cno
+		from(
+			select /*+INDEX_DESC(tbl_board pk_board) */
+				rownum rn,bno,title,content,writer,regdate,updatedate,cno
+			from tbl_board
+			where 
+		]]>    
+	    <trim prefix="(" suffix=") and " prefixOverrides="or">
+	    	<foreach item="type" collection="typeArr">
+	    		<trim prefix="or">
+	    			<choose>
+	    				<when test="type=='T'.toString()">
+	    					title like '%'||#{keyword}||'%'
+	    				</when>
+	    				<when test="type=='C'.toString()">
+	    					content like '%'||#{keyword}||'%'
+	    				</when>
+	    				<!-- <when test="type=='W'.toString()">
+	    					writer like '%'||#{keyword}||'%'
+	    				</when> -->
+	    			</choose>
+	    		</trim>
+	    	</foreach>
+	    </trim>
+	    
+	<![CDATA[    
+	    rownum <= #{pageNum}*#{amount} 
+	)
+	where rn > (#{pageNum}-1)*#{amount}
+	]]>
+	</select>
+
+	<!-- // 채은열 0830 추가******************************************************************************************************************* -->
+	<!-- 카테고리별 목록 페이징 처리 -->
+	<select id="getListWithPagingCategory" resultType="org.newjeans.domain.NewJeansDTO">
+	      <![CDATA[
+	    select bno, title, content, writer, cno, regdate, updatedate
+	    from (
+	      select /*+INDEX_DESC(tbl_board pk_board) */
+	        rownum rn, bno, title, content, writer, cno, regdate, updatedate
+	      from tbl_board
+	     WHERE cno  = #{cno}
+	      ]]>
+	       <trim prefix="(" suffix=") and " prefixOverrides="or">
+	        <foreach item="type" collection="typeArr">
+	          <trim prefix="or">
+	            <choose>
+	              <when test="type=='T'.toString()">
+	                title like '%'||#{keyword}||'%'
+	              </when>
+	              <when test="type=='C'.toString()">
+	                content like '%'||#{keyword}||'%'
+	              </when>
+	              <!-- <when test="type=='W'.toString()">
+	                writer like '%'||#{keyword}||'%'
+	              </when> -->
+	            </choose>
+	          </trim>
+	        </foreach>
+	      </trim>
+	      <![CDATA[
+	      AND ROWNUM <= #{pageNum} * #{amount}
+	    )
+	    WHERE rn > (#{pageNum} - 1) * #{amount}
+	    ]]>
+	</select>
+	<!--  // 채은열 0830 추가*******************************************************************************************************************-->
+
+	<!-- 전체 글 수 -->
+	<select id="getTotalCount" resultType="int">
+		select count(*) from tbl_board
+		where
+		<include refid="criteria"></include>
+		bno > 0
+	</select>
+
+	<!--// 채은열 0830 추가*******************************************************************************************************************  -->
+	<!-- 카테고리별 전체 글 수 -->
+	<select id="getTotalCountCategory" resultType="int">
+	    select count(*) from tbl_board
+	    where cno = #{cno}
+	    <include refid="criteria"/>
+	</select>
+	<!--// 채은열 0830 추가*******************************************************************************************************************  -->
+
+	<update id="updateReplyCnt">
+		update tbl_board set replycnt = replycnt + #{amount} where bno = #{bno}
+	</update>  
+	
+	<!-- 게시글 중 댓글 수가 가장 많은 상위 5개 게시글 조회 -->
+	<select id="getTop5PostsByReplyCount" resultType="org.newjeans.domain.NewJeansDTO">
+	    <![CDATA[
+	    SELECT * FROM (
+	        SELECT b.bno, b.title, b.content, b.writer, b.regdate, b.updatedate, b.cno, COUNT(r.rno) AS replycnt
+	        FROM tbl_board b
+	        LEFT JOIN tbl_reply r ON b.bno = r.bno
+	        GROUP BY b.bno, b.title, b.content, b.writer, b.regdate, b.updatedate, b.cno
+	        ORDER BY replycnt DESC
+	    )
+	    WHERE ROWNUM <= 5
+	    ]]>
+	</select>
+</mapper>
